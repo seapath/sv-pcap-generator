@@ -19,6 +19,11 @@ parser.add_argument(
 parser.add_argument(
     "-n", "--nb_streams", type=int, help="Number of SV streams", default=64
 )
+
+parser.add_argument("-p", "--svID_prefix", type=str, help="SV ID prefix", default="svID")
+
+parser.add_argument("-d", "--svID_digits", type=int, help="Number of SV ID digits", default=4)
+
 parser.add_argument(
     "-l",
     "--loop",
@@ -64,17 +69,30 @@ nb_streams = args.nb_streams
 max_counter = args.loop
 i_rms = args.i_rms
 v_rms = args.v_rms
+nb_digits = args.svID_digits
+svID_max = 10 ** nb_digits - 1
+svID_prefix = args.svID_prefix
+
+try:
+    svID_prefix.encode("ascii")
+except UnicodeEncodeError:
+    print("Error svID_prefix must be an ASCII string", file=sys.stderr)
+    sys.exit(1)
+
+if nb_digits < 1 or nb_digits > 8:
+    print("Error nb_digits must be between 1 and 8", file=sys.stderr)
+    sys.exit(1)
 
 if app_id < 0x4000 or app_id > 0x4FFF:
     print("Error app_id must be between 0x4000 and 0x4FFFF", file=sys.stderr)
     sys.exit(1)
 
-if start_id < 0 or start_id + nb_streams > 9999:
+if start_id < 0 or start_id + nb_streams > svID_max:
     print("Error in start_id", file=sys.stderr)
     sys.exit(1)
 
-if nb_streams > 9999 or nb_streams < 1:
-    print("Error nb_streams must be between 1 and 9999", file=sys.stderr)
+if nb_streams > svID_max or nb_streams < 1:
+    print(f"Error nb_streams must be between 1 and {svID_max}", file=sys.stderr)
     sys.exit(1)
 
 if max_counter < 1 or max_counter > 65536:
@@ -90,6 +108,8 @@ HEADER = (
     b"\x00\x00\x04\x00\x01\x00\x00\x00"
 )
 
+start_id_str = f"{start_id:0{nb_digits}d}"
+svIDFirst = svID_prefix + start_id_str
 
 # This data are generated from an pcap file
 # It is possible to change the SV to sent. The only restriction is that the
@@ -107,7 +127,9 @@ SV_DATA = (
     # Timestamp
     b"\x00\x00\x00\x00\x00\x00\x00\x00"
     # Packet length
-    b"\x78\x00\x00\x00\x78\x00\x00\x00"
+    + bytes([0x70 + len(svIDFirst)]) + b"\x00\x00\x00"
+    # Capture length
+    + bytes([0x70 + len(svIDFirst)]) + b"\x00\x00\x00"
     # Destination MAC
     b"\x01\x0c\xcd\x01\x00\x01"
     # Source MAC
@@ -117,19 +139,19 @@ SV_DATA = (
     # AppId
     b"\x40\x00"
     # Length
-    b"\x00\x6A"
+    b"\x00" + bytes([0x62 + len(svIDFirst)]) +
     # Reserved 1 & Reserved 2
     b"\x00\x00\x00\x00"
     # savPDU 0x60 Length
-    b"\x60\x60"
+    b"\x60" + bytes([0x58 + len(svIDFirst)]) +
     # Number of asdu 0x80 L(1) 8
     b"\x80\x01\x01"
     # Sequence of asdu 0xA2 L
-    b"\xa2\x5b"
+    b"\xa2" + bytes([0x53 + len(svIDFirst)]) +
     # Sequence ASDU1 0x30 L
-    b"\x30\x59"
+    b"\x30" + bytes([0x51 + len(svIDFirst)]) +
     # SvID 0x80 L Values
-    b"\x80\x08svID0000"
+    b"\x80" + bytes([len(svIDFirst)]) + svIDFirst.encode("ascii") +
     # smpCnt 0x82 L(2) value
     b"\x82\x02\x00\x00"
     # ConfRev 0x83 L(4) value
@@ -149,10 +171,10 @@ SV_DATA = (
     # b"\x00\x00\x00\x08\x00\x00\x00\x00"
 )
 
+TS_OFFSET = 0
 APP_ID_OFFSET = 0x1E
 SV_ID_OFFSET = 0x31
-SMP_CNT_OFFSET = 0x3B
-TS_OFFSET = 0
+SMP_CNT_OFFSET = SV_ID_OFFSET + 2 + len(svIDFirst)
 
 
 def get_second_microsecond(ts):
@@ -208,8 +230,8 @@ for i in range(0, max_counter):
         sv_data, TS_OFFSET, struct.pack("II", second + 1, microsecond + 1)
     )
     for st in range(0, nb_streams):
-        # svID string are svIDXXXX
-        svID_data = f"svID{start_id+st:04d}".encode("ascii")
+        # svID string are svID_prefixXXXX
+        svID_data = f"{svID_prefix}{start_id+st:0{nb_digits}d}".encode("ascii")
         write_bytes_le(sv_data, SV_ID_OFFSET, svID_data, len(svID_data) - 1)
         pcap_data += sv_data
         for index, channel in np.ndenumerate(current_channels):
