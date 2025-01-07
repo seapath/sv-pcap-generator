@@ -54,6 +54,20 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "--mac_source",
+    type=str,
+    help="Source MAC address",
+    default="c4:b5:12:00:00:01",
+)
+
+parser.add_argument(
+    "--mac_dest",
+    type=str,
+    help="Destination MAC address",
+    default="01:0c:cd:01:00:01",
+)
+
+parser.add_argument(
     "output",
     type=str,
     help="Path to the output pcap file which can be replayed using tcpreplay",
@@ -72,6 +86,8 @@ v_rms = args.v_rms
 nb_digits = args.svID_digits
 svID_max = 10 ** nb_digits - 1
 svID_prefix = args.svID_prefix
+mac_source = args.mac_source
+mac_dest = args.mac_dest
 
 try:
     svID_prefix.encode("ascii")
@@ -103,6 +119,21 @@ if freq <= 0:
     print("Error frequency must be greater than 0", file=sys.stderr)
     sys.exit(1)
 
+if len(mac_source) != 17 or len(mac_dest) != 17:
+    print("Error MAC address must be in the format XX:XX:XX:XX:XX:XX", file=sys.stderr)
+    sys.exit(1)
+
+def mac_string_to_bytes(mac):
+    return bytes.fromhex(mac.replace(":", ""))
+
+# Check if the MAC address is valid
+try:
+    mac_source = mac_string_to_bytes(mac_source)
+    mac_dest = mac_string_to_bytes(mac_dest)
+except ValueError:
+    print("Error MAC address must be in the format XX:XX:XX:XX:XX:XX", file=sys.stderr)
+    sys.exit(1)
+
 HEADER = (
     b"\xd4\xc3\xb2\xa1\x02\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00"
     b"\x00\x00\x04\x00\x01\x00\x00\x00"
@@ -110,6 +141,7 @@ HEADER = (
 
 start_id_str = f"{start_id:0{nb_digits}d}"
 svIDFirst = svID_prefix + start_id_str
+
 
 # This data are generated from an pcap file
 # It is possible to change the SV to sent. The only restriction is that the
@@ -131,9 +163,9 @@ SV_DATA = (
     # Capture length
     + bytes([0x70 + len(svIDFirst)]) + b"\x00\x00\x00"
     # Destination MAC
-    b"\x01\x0c\xcd\x01\x00\x01"
+    + mac_dest +
     # Source MAC
-    b"\xc4\xb5\x12\x00\x00\x01"
+    mac_source +
     # Ethertype
     b"\x88\xBA"
     # AppId
