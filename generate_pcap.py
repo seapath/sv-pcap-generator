@@ -68,6 +68,20 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "--vlanID",
+    type=int,
+    help="VLAN ID. 0 to disable VLAN",
+    default=0,
+)
+
+parser.add_argument(
+    "--vlanPriority",
+    type=int,
+    help="VLAN Priority",
+    default=4,
+)
+
+parser.add_argument(
     "output",
     type=str,
     help="Path to the output pcap file which can be replayed using tcpreplay",
@@ -88,6 +102,8 @@ svID_max = 10 ** nb_digits - 1
 svID_prefix = args.svID_prefix
 mac_source = args.mac_source
 mac_dest = args.mac_dest
+vlanID = args.vlanID
+vlanPriority = args.vlanPriority
 
 try:
     svID_prefix.encode("ascii")
@@ -134,6 +150,14 @@ except ValueError:
     print("Error MAC address must be in the format XX:XX:XX:XX:XX:XX", file=sys.stderr)
     sys.exit(1)
 
+if vlanID < 0 or vlanID > 4095:
+    print("Error VLAN ID must be between 0 and 4095", file=sys.stderr)
+    sys.exit(1)
+
+if vlanPriority < 0 or vlanPriority > 7:
+    print("Error VLAN Priority must be between 0 and 7", file=sys.stderr)
+    sys.exit(1)
+
 HEADER = (
     b"\xd4\xc3\xb2\xa1\x02\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00"
     b"\x00\x00\x04\x00\x01\x00\x00\x00"
@@ -142,6 +166,42 @@ HEADER = (
 start_id_str = f"{start_id:0{nb_digits}d}"
 svIDFirst = svID_prefix + start_id_str
 
+def get_second_microsecond(ts):
+    second = int(ts)
+    microsecond = int(round((ts - second) * 1000000))
+    return (second, microsecond)
+
+
+def write_bytes_le(sv, offset, data, len=-2):
+    for i in data:
+        if len == -1:
+            break
+        sv[offset] = i
+        offset += 1
+        if len > 0:
+            len -= 1
+
+
+def write_bytes_be(sv, offset, data):
+    offset += len(data) - 1
+    for i in data:
+        sv[offset] = i
+        offset -= 1
+
+if vlanID != 0:
+    # 802.1Q VLAN Tag Header
+    # 0x8100: 802.1Q VLAN Tag Protocol Identifier
+    # 0x00: Priority Code Point (PCP) (3 bits)
+    # 0x00: Canonical Format Indicator (CFI) (1 bit)
+    # 0x000: VLAN Identifier (VID) (12 bits)
+    tpid = 0x8100
+    tci = (vlanPriority << 13) | vlanID
+    vlan_header = struct.pack("!HH", tpid, tci)
+
+else:
+    vlan_header = b""
+
+vlan_size = len(vlan_header)
 
 # This data are generated from an pcap file
 # It is possible to change the SV to sent. The only restriction is that the
@@ -159,13 +219,15 @@ SV_DATA = (
     # Timestamp
     b"\x00\x00\x00\x00\x00\x00\x00\x00"
     # Packet length
-    + bytes([0x70 + len(svIDFirst)]) + b"\x00\x00\x00"
+    + bytes([0x70 + len(svIDFirst) + vlan_size]) + b"\x00\x00\x00"
     # Capture length
-    + bytes([0x70 + len(svIDFirst)]) + b"\x00\x00\x00"
+    + bytes([0x70 + len(svIDFirst) + vlan_size]) + b"\x00\x00\x00"
     # Destination MAC
     + mac_dest +
     # Source MAC
     mac_source +
+    # VLAN Header
+    vlan_header +
     # Ethertype
     b"\x88\xBA"
     # AppId
@@ -204,32 +266,9 @@ SV_DATA = (
 )
 
 TS_OFFSET = 0
-APP_ID_OFFSET = 0x1E
-SV_ID_OFFSET = 0x31
-SMP_CNT_OFFSET = SV_ID_OFFSET + 2 + len(svIDFirst)
-
-
-def get_second_microsecond(ts):
-    second = int(ts)
-    microsecond = int(round((ts - second) * 1000000))
-    return (second, microsecond)
-
-
-def write_bytes_le(sv, offset, data, len=-2):
-    for i in data:
-        if len == -1:
-            break
-        sv[offset] = i
-        offset += 1
-        if len > 0:
-            len -= 1
-
-
-def write_bytes_be(sv, offset, data):
-    offset += len(data) - 1
-    for i in data:
-        sv[offset] = i
-        offset -= 1
+APP_ID_OFFSET = 0x1E + vlan_size
+SV_ID_OFFSET = 0x31 + vlan_size
+SMP_CNT_OFFSET = SV_ID_OFFSET + 2 + len(svIDFirst) + vlan_size
 
 
 pcap_data = bytearray()
