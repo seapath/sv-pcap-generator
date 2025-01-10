@@ -148,7 +148,5 @@ done
 echo "merging $NB_ITERATION files into $OUTPUT_FILE"
 mergecap -w "$OUTPUT_FILE" $PCAP_OUT*
 tshark -r $OUTPUT_FILE -w $WORK_DIR/tmp.pcap -F libpcap
-mv tmp.pcap $OUTPUT_FILE
 echo "cleaning"
-rm $WORK_DIR/*
-rm -r $WORK_DIR
+rm -r "$WORK_DIR"
