@@ -268,7 +268,7 @@ SV_DATA = (
 TS_OFFSET = 0
 APP_ID_OFFSET = 0x1E + vlan_size
 SV_ID_OFFSET = 0x31 + vlan_size
-SMP_CNT_OFFSET = SV_ID_OFFSET + 2 + len(svIDFirst) + vlan_size
+SMP_CNT_OFFSET = SV_ID_OFFSET + 2 + len(svIDFirst)
 
 
 pcap_data = bytearray()
