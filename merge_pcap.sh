@@ -16,6 +16,7 @@ options:
    -b second 2A file
    -o output file
    -n iterations
+   -f pcap format (pcapng or pcap) default pcap
    -h display this help message
 EOF
 }
@@ -27,11 +28,13 @@ die()
 	exit 1
 }
 
+PCAP_FORMAT="pcap"
+
 # Name:       parse_options
 # Brief:      Parse options from command line
 # Param[in]:  Command line parameters
 parse_options() {
-    ARGS=$(getopt -o "a:b:o:n:h" -n "generate_pcap.sh" -- "$@")
+    ARGS=$(getopt -o "a:b:o:n:f:h" -n "generate_pcap.sh" -- "$@")
 
     # Bad arguments
     if [ $? -ne 0 ]; then
@@ -64,6 +67,10 @@ parse_options() {
                 ;;
             -o)
                 export OUTPUT_FILE="$2"
+                shift 2
+                ;;
+            -f)
+                PCAP_FORMAT="$2"
                 shift 2
                 ;;
             -h|--help)
@@ -146,7 +153,6 @@ do
 	offset=$(expr $offset + 2)
 done
 echo "merging $NB_ITERATION files into $OUTPUT_FILE"
-mergecap -w "$OUTPUT_FILE" $PCAP_OUT*
-tshark -r $OUTPUT_FILE -w $WORK_DIR/tmp.pcap -F libpcap
+mergecap -F "${PCAP_FORMAT}" -w "$OUTPUT_FILE" $PCAP_OUT*
 echo "cleaning"
 rm -r "$WORK_DIR"
