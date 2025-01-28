@@ -9,7 +9,7 @@ print_usage()
 cat <<EOF
 This script concatenate and repeat two pcap files
 
-./$0 [OPTIONS]
+$0 [OPTIONS]
 
 options:
    -a first 1A file
@@ -29,12 +29,13 @@ die()
 }
 
 PCAP_FORMAT="pcap"
+FREQ=60
 
 # Name:       parse_options
 # Brief:      Parse options from command line
 # Param[in]:  Command line parameters
 parse_options() {
-    ARGS=$(getopt -o "a:b:o:n:f:h" -n "generate_pcap.sh" -- "$@")
+    ARGS=$(getopt -o "a:b:o:n:f:h" -n "merge_pcap.sh" -- "$@")
 
     # Bad arguments
     if [ $? -ne 0 ]; then
