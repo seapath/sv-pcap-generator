@@ -23,9 +23,9 @@ EOF
 
 die()
 {
-	local err="$1"
-	echo "Error: $err"
-	exit 1
+    local err="$1"
+    echo "Error: $err"
+    exit 1
 }
 
 PCAP_FORMAT="pcap"
@@ -92,27 +92,27 @@ parse_options() {
 
 merge_pcap_a_and_b()
 {
-	local duration_a="$1"
-	local merged_file="$2"
-	local b_file_shifted=$(mktemp)
-	editcap -t $duration_a "$B_file" "$b_file_shifted"
-	mergecap -w "$merged_file" "$A_file" "$b_file_shifted"
-	rm $b_file_shifted
+    local duration_a="$1"
+    local merged_file="$2"
+    local b_file_shifted=$(mktemp)
+    editcap -t $duration_a "$B_file" "$b_file_shifted"
+    mergecap -w "$merged_file" "$A_file" "$b_file_shifted"
+    rm $b_file_shifted
 }
 
 generate_offset_pcap_file()
 {
-	local offset="$1"
-	local src_pcap="$2"
-	local out_pcap="$3"
+    local offset="$1"
+    local src_pcap="$2"
+    local out_pcap="$3"
 
-	if [ "$offset" -eq 0 ];
-	then
-		cp "$src_pcap" "$out_pcap.$offset"
-		return
-	else
-		editcap -t "$offset" "$src_pcap" "$out_pcap.$offset"
-	fi
+    if [ "$offset" -eq 0 ];
+    then
+        cp "$src_pcap" "$out_pcap.$offset"
+        return
+    else
+        editcap -t "$offset" "$src_pcap" "$out_pcap.$offset"
+    fi
 }
 ##########################
 ########## MAIN ##########
@@ -123,8 +123,8 @@ parse_options "$@"
 
 if [ -z "$A_file" ] || [ -z "$B_file" ] || [ -z "$NB_ITERATION" ] || [ -z "$OUTPUT_FILE" ]
 then
-	print_usage
-	exit 1
+    print_usage
+    exit 1
 fi
 
 echo "A_file" = "$A_file"
@@ -146,11 +146,11 @@ offset=0
 
 for i in $(seq 1 $NB_ITERATION);
 do
-	echo "[$i/$NB_ITERATION] edit"
-	generate_offset_pcap_file "$offset" "$PCAP_SRC" "$PCAP_OUT"
-	#each $PCAP_SRC has a duration of 1+1=2seconds
-	#TODO: get dynamically the value
-	offset=$(expr $offset + 2)
+    echo "[$i/$NB_ITERATION] edit"
+    generate_offset_pcap_file "$offset" "$PCAP_SRC" "$PCAP_OUT"
+    #each $PCAP_SRC has a duration of 1+1=2seconds
+    #TODO: get dynamically the value
+    offset=$(expr $offset + 2)
 done
 echo "merging $NB_ITERATION files into $OUTPUT_FILE"
 mergecap -F "${PCAP_FORMAT}" -w "$OUTPUT_FILE" $PCAP_OUT*
