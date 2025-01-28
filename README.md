@@ -42,17 +42,26 @@ streams, for a 50Hz electrical network, run:
 python3 generate_pcap.py -n 8 -l 4000 -f 50 output.pcap
 ```
 
-Optionally, you can run `merge_pcap.sh` script to buckle a generated
-pcap with himself, and thus, make bigger pcap files.
+Optionally, you can run `merge_sv_pcap.py` script to merged multiple SV pcap
+file. This is useful to generate discontinuity to test electrical lines
+protections.
 
 To do so, run:
 
 ```bash
-./merge_pcap.sh -a output.pcap -b output.pcap -o merged_output.pcap -n 10
+./merge_sv_pcap.py 1.pcap 2.pcap 3.pcap -o merged.pcap -f 50
 ```
 
-This command will buckle the pcap file `output.pcap` with itself on
-10 iterations.
+The `merge_sv_pcap.py` can be also used to repeat a pcap multiple time with `-n`
+argument
+
+```bash
+./merge_sv_pcap.py my_sv_recored.pcap -o 10_interations.pcap -n 10 -f 50
+```
+
+In both case a delay between the merged pcap is inserted base on the current
+frequency.
+
 
 ## Release notes
 ### Version v0.1
