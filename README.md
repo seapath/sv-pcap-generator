@@ -65,4 +65,10 @@ frequency.
 
 ## Release notes
 ### Version v0.1
-Initial release
+ * Initial release
+
+### Version v1.0.0
+
+* Rewrite merge_pcap in Python
+* Improve merge_pcap to support multiple pcap with different duration
+* Add VLAN ID, Priority and MAC addresses options
