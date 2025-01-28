@@ -16,7 +16,8 @@ options:
    -b second 2A file
    -o output file
    -n iterations
-   -f pcap format (pcapng or pcap) default pcap
+   -t pcap format type (pcapng or pcap) default pcap
+   -f Frequency in Hz. Default is 60 (60Hz)
    -h display this help message
 EOF
 }
@@ -35,7 +36,7 @@ FREQ=60
 # Brief:      Parse options from command line
 # Param[in]:  Command line parameters
 parse_options() {
-    ARGS=$(getopt -o "a:b:o:n:f:h" -n "merge_pcap.sh" -- "$@")
+    ARGS=$(getopt -o "a:b:o:n:t:f:h" -n "merge_pcap.sh" -- "$@")
 
     # Bad arguments
     if [ $? -ne 0 ]; then
@@ -74,6 +75,10 @@ parse_options() {
                 PCAP_FORMAT="$2"
                 shift 2
                 ;;
+            -t)
+                FREQ="$2"
+                shift 2
+                ;;
             -h|--help)
                 print_usage
                 exit 0
@@ -89,6 +94,16 @@ parse_options() {
                 ;;
         esac
     done
+}
+
+samples_per_cyle=80
+samples_per_second=$(( samples_per_cyle * FREQ ))
+sampling_rate=$(python <<< "print( 1 / $samples_per_second )")
+
+get_pcap_duration()
+{
+    local pcap_file="$1"
+    capinfos -u "$pcap_file" | grep "Capture duration" | grep -Eo '[0-9]+[.,]?[0-9]*' | tr "," "."
 }
 
 merge_pcap_a_and_b()
@@ -107,7 +122,7 @@ generate_offset_pcap_file()
     local src_pcap="$2"
     local out_pcap="$3"
 
-    if [ "$offset" -eq 0 ];
+    if [ "$offset" = "0" ];
     then
         cp "$src_pcap" "$out_pcap.$offset"
         return
@@ -139,19 +154,16 @@ WORK_DIR=$(readlink -f $WORK_DIR_NAME)
 PCAP_SRC="$WORK_DIR/src.pcap"
 PCAP_OUT="$WORK_DIR/out.pcap"
 
-#A_file and B_file is supposed to have 1s
-#TODO: get dynamically the value
-duration_a_file=1
+duration_a_file=$(get_pcap_duration "$A_file")
+duration_b_file=$(get_pcap_duration "$B_file")
 merge_pcap_a_and_b $duration_a_file $PCAP_SRC || die "can not merge A and B"
-offset=0
 
+offset=0
 for i in $(seq 1 $NB_ITERATION);
 do
     echo "[$i/$NB_ITERATION] edit"
     generate_offset_pcap_file "$offset" "$PCAP_SRC" "$PCAP_OUT"
-    #each $PCAP_SRC has a duration of 1+1=2seconds
-    #TODO: get dynamically the value
-    offset=$(expr $offset + 2)
+    offset=$(python <<< print\("$offset + $duration_a_file + $duration_b_file + $sampling_rate"\))
 done
 echo "merging $NB_ITERATION files into $OUTPUT_FILE"
 mergecap -F "${PCAP_FORMAT}" -w "$OUTPUT_FILE" $PCAP_OUT*
