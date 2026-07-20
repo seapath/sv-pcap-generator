@@ -76,6 +76,65 @@ python3 gen_sv_pcap.py -n 64 -m 6 output.pcap
 ```
 Note `64` isn't evenly divisible by 6, so this gives you ten frames of 6 ASDUs plus a final frame of 4 ASDUs per loop iteration — the script handles that remainder automatically rather than erroring out.
 
+### ***
+Here are some setups modeled on real IEC 61850-9-2LE process bus deployments:
+
+### 1. Single merging unit (MU) — the most common real-world case
+A physical merging unit typically digitizes one bay (4 CTs + 4 VTs) and publishes exactly one ASDU per frame at 80 samples/cycle:
+
+```bash
+python3 gen_sv_pcap.py -n 1 -m 1 -f 60 -v 63.5 -i 1 mu_single_bay.pcap
+```
+
+### 2. Merging unit concentrator / bay controller bundling several MUs
+Some process bus switches or bay controllers combine SV streams from multiple MUs onto a shared multicast address, publishing several ASDUs per frame (common for busbar protection needing many CT inputs):
+
+```bash
+python3 gen_sv_pcap.py -n 8 -m 8 -f 60 -a 16385 busbar_protection.pcap
+```
+
+All 8 streams land in a single frame — this is the classic "8 ASDUs per frame" pattern seen in transformer/busbar differential schemes.
+
+### 3. 50 Hz network sample rate
+IEC 61850-9-2LE specifies 80 samples/cycle for 50 Hz systems too, giving a 4000 Hz sample rate instead of 4800 Hz:
+
+```bash
+python3 gen_sv_pcap.py -n 1 -m 1 -f 50 -v 57.7 -i 5 mu_50hz.pcap
+```
+
+### 4. VLAN-tagged process bus traffic
+Real substation LANs almost always run SV on a dedicated VLAN with priority 4 (per IEC 61850-90-4/IEEE 802.1Q recommendations for GOOSE/SV traffic):
+
+```bash
+python3 gen_sv_pcap.py -n 4 -m 4 --vlanID 100 --vlanPriority 4 vlan_tagged.pcap
+```
+
+### 5. Redundant PRP network — two independent streams, same data
+Parallel Redundancy Protocol duplicates every frame over two LANs (LAN A / LAN B) with different source MACs but the same content. You'd generate two files and replay them on separate interfaces:
+
+```bash
+python3 gen_sv_pcap.py -n 4 -m 4 --mac_source c4:b5:12:00:00:01 --mac_dest 01:0c:cd:04:00:01 lanA.pcap
+python3 gen_sv_pcap.py -n 4 -m 4 --mac_source c4:b5:12:00:00:02 --mac_dest 01:0c:cd:04:00:02 lanB.pcap
+```
+
+### 6. Line differential protection — two remote-end streams merged locally
+Emulating a scheme where local and remote-end current samples are received and bundled for comparison:
+
+```bash
+python3 gen_sv_pcap.py -n 2 -m 2 -p LineDiff -d 2 -s 1 -f 60 line_diff.pcap
+```
+
+### 7. Large substation stress test — many bays, moderate bundling
+For network/switch stress testing across a whole substation (e.g. 32 bays), a common pattern is grouping a handful of ASDUs per frame to stay under the Ethernet MTU while still testing realistic multicast load:
+
+```bash
+python3 gen_sv_pcap.py -n 32 -m 4 -l 6000 -f 60 substation_stress.pcap
+```
+
+A practical note: keep nb_asdu reasonable relative to Ethernet's 1500-byte MTU. Each ASDU (with a typical 8-char SvID) is roughly 90–95 bytes, so 8 ASDUs per frame (~750 bytes) is safely within limits, while something like 15+ ASDUs starts approaching the point where real switches/MUs wouldn't bundle them into one frame in practice.
+
+
+## Merging captures
 
 Optionally, you can run `merge_sv_pcap.py` script to merged multiple SV pcap
 file. This is useful to generate discontinuity to test electrical lines
