@@ -166,3 +166,5 @@ frequency.
 * Rewrite merge_pcap in Python
 * Improve merge_pcap to support multiple pcap with different duration
 * Add VLAN ID, Priority and MAC addresses options
+
+2026 improved by Jose Saldana at CIRCE Technology center, within the framework of the Horizon Europe project ESTELAR (Grant Agreement No. 101192574).
