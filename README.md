@@ -24,7 +24,7 @@ on a network using tools such as `bittwist` or `tcpreplay`.
   for 60Hz electrical network)
 - Supports pcap loopback to make longer trafic generation
 
-### Improvements 2026
+### Improvements July 2026
 
 - New `-m/--nb_asdu` option: number of ASDUs (streams) bundled into a single frame. `nb_streams` is chunked into groups of this size (the last group can be smaller if it doesn't divide evenly), and each group becomes one frame.
 
@@ -166,10 +166,11 @@ frequency.
 * Improve merge_pcap to support multiple pcap with different duration
 * Add VLAN ID, Priority and MAC addresses options
 
-### Version v2.0.0
-2026 improved by Jose Saldana at CIRCE Technology center, within the framework of the Horizon Europe project ESTELAR (Grant Agreement No. 101192574).
+### Version v1.0.1
+July 2026 improved by Jose Saldana at CIRCE Technology center, within the framework of the Horizon Europe project ESTELAR (Grant Agreement No. 101192574).
 
-* number of ASDUs option added.
+Additions:
+* number of ASDUs option.
 * Dynamic BER length encoding.
 * Frames are built bottom-up per iteration.
 * Samples are computed once per loop iteration and reused across all ASDUs/frames at that timestamp.
