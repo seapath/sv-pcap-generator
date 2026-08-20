@@ -24,6 +24,18 @@ on a network using tools such as `bittwist` or `tcpreplay`.
   for 60Hz electrical network)
 - Supports pcap loopback to make longer trafic generation
 
+### Improvements July 2026
+
+- New `-m/--nb_asdu` option: number of ASDUs (streams) bundled into a single frame. `nb_streams` is chunked into groups of this size (the last group can be smaller if it doesn't divide evenly), and each group becomes one frame.
+
+- Dynamic BER length encoding: the original code hard-coded single-byte lengths (e.g. `0x6` + len(svIDFirst)`), which only worked because there was always exactly one ASDU. Bundling multiple ASDUs easily pushes lengths past 127 bytes, so a proper `ber_length()` helper has been added that emits short-form or long-form BER lengths as needed, used for every TLV (ASDU, SeqOfASDU, savPDU, SeqOfData).
+
+- Frames are built bottom-up per iteration: `build_asdu()` → `build_savpdu()` → `build_sv_pdu()` → `Ethernet` frame, then wrapped in a correctly-sized pcap record header (also switched the pcap `incl_len/orig_len` to proper 4-byte little-endian fields instead of the single-byte-with-zero-padding trick, since frame sizes now regularly exceed 255 bytes).
+
+- Samples are computed once per loop iteration and reused across all ASDUs/frames at that timestamp, matching the original's behavior (same waveform value regardless of stream).
+Added validation: `nb_asdu` must be 1–255 (the `NumOfASDU` field is a single byte) and ≤ nb_streams.
+
+
 ## Installation
 ### Requirements
 
@@ -35,12 +47,94 @@ pip install numpy
 To run merge_pcap script, `wireshark` package is needed.
 ## Usage
 
+### Example 1
 To generate a IEC61850 SV pcap on 8 streams, with 4000 SV for each
 streams, for a 50Hz electrical network, run:
 
 ```bash
 python3 generate_pcap.py -n 8 -l 4000 -f 50 output.pcap
 ```
+
+### Example 2
+
+```bash
+python3 gen_sv_pcap.py -n 96 -m 6 -l 4000 -f 60 sv_6asdu.pcap
+```
+
+Breakdown of the flags:
+
+`-n 96` — total number of streams (96 here just so it divides evenly into groups of 6; use whatever you actually need)
+`-m 6` — bundle 6 ASDUs per frame, so this produces 96 / 6 = 16 frames per loop iteration
+`-l 4000` — 4000 loop iterations (default)
+`-f 60` — 60 Hz sampling frequency (default)
+`sv_6asdu.pcap` — output file
+
+If you want to keep all your other defaults (`start_id`, `svID` prefix/digits, RMS values, MAC addresses, `VLAN`, etc.), you can just add `-m 6` to whatever command you were already running, e.g.:
+
+```bash
+python3 gen_sv_pcap.py -n 64 -m 6 output.pcap
+```
+Note `64` isn't evenly divisible by 6, so this gives you ten frames of 6 ASDUs plus a final frame of 4 ASDUs per loop iteration — the script handles that remainder automatically rather than erroring out.
+
+### ***
+Here are some setups modeled on real IEC 61850-9-2LE process bus deployments:
+
+### 1. Single merging unit (MU) — the most common real-world case
+A physical merging unit typically digitizes one bay (4 CTs + 4 VTs) and publishes exactly one ASDU per frame at 80 samples/cycle:
+
+```bash
+python3 gen_sv_pcap.py -n 1 -m 1 -f 60 -v 63.5 -i 1 mu_single_bay.pcap
+```
+
+### 2. Merging unit concentrator / bay controller bundling several MUs
+Some process bus switches or bay controllers combine SV streams from multiple MUs onto a shared multicast address, publishing several ASDUs per frame (common for busbar protection needing many CT inputs):
+
+```bash
+python3 gen_sv_pcap.py -n 8 -m 8 -f 60 -a 16385 busbar_protection.pcap
+```
+
+All 8 streams land in a single frame — this is the classic "8 ASDUs per frame" pattern seen in transformer/busbar differential schemes.
+
+### 3. 50 Hz network sample rate
+IEC 61850-9-2LE specifies 80 samples/cycle for 50 Hz systems too, giving a 4000 Hz sample rate instead of 4800 Hz:
+
+```bash
+python3 gen_sv_pcap.py -n 1 -m 1 -f 50 -v 57.7 -i 5 mu_50hz.pcap
+```
+
+### 4. VLAN-tagged process bus traffic
+Real substation LANs almost always run SV on a dedicated VLAN with priority 4 (per IEC 61850-90-4/IEEE 802.1Q recommendations for GOOSE/SV traffic):
+
+```bash
+python3 gen_sv_pcap.py -n 4 -m 4 --vlanID 100 --vlanPriority 4 vlan_tagged.pcap
+```
+
+### 5. Redundant PRP network — two independent streams, same data
+Parallel Redundancy Protocol duplicates every frame over two LANs (LAN A / LAN B) with different source MACs but the same content. You'd generate two files and replay them on separate interfaces:
+
+```bash
+python3 gen_sv_pcap.py -n 4 -m 4 --mac_source c4:b5:12:00:00:01 --mac_dest 01:0c:cd:04:00:01 lanA.pcap
+python3 gen_sv_pcap.py -n 4 -m 4 --mac_source c4:b5:12:00:00:02 --mac_dest 01:0c:cd:04:00:02 lanB.pcap
+```
+
+### 6. Line differential protection — two remote-end streams merged locally
+Emulating a scheme where local and remote-end current samples are received and bundled for comparison:
+
+```bash
+python3 gen_sv_pcap.py -n 2 -m 2 -p LineDiff -d 2 -s 1 -f 60 line_diff.pcap
+```
+
+### 7. Large substation stress test — many bays, moderate bundling
+For network/switch stress testing across a whole substation (e.g. 32 bays), a common pattern is grouping a handful of ASDUs per frame to stay under the Ethernet MTU while still testing realistic multicast load:
+
+```bash
+python3 gen_sv_pcap.py -n 32 -m 4 -l 6000 -f 60 substation_stress.pcap
+```
+
+A practical note: keep nb_asdu reasonable relative to Ethernet's 1500-byte MTU. Each ASDU (with a typical 8-char SvID) is roughly 90–95 bytes, so 8 ASDUs per frame (~750 bytes) is safely within limits, while something like 15+ ASDUs starts approaching the point where real switches/MUs wouldn't bundle them into one frame in practice.
+
+
+## Merging captures
 
 Optionally, you can run `merge_sv_pcap.py` script to merged multiple SV pcap
 file. This is useful to generate discontinuity to test electrical lines
@@ -68,7 +162,15 @@ frequency.
  * Initial release
 
 ### Version v1.0.0
-
 * Rewrite merge_pcap in Python
 * Improve merge_pcap to support multiple pcap with different duration
 * Add VLAN ID, Priority and MAC addresses options
+
+### Version v1.0.1
+July 2026 improved by Jose Saldana at CIRCE Technology center, within the framework of the Horizon Europe project ESTELAR (Grant Agreement No. 101192574).
+
+Additions:
+* number of ASDUs option.
+* Dynamic BER length encoding.
+* Frames are built bottom-up per iteration.
+* Samples are computed once per loop iteration and reused across all ASDUs/frames at that timestamp.
